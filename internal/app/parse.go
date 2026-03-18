@@ -1,0 +1,271 @@
+package app
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+const (
+	defaultServerIP   = "localhost"
+	defaultServerPort = 7233
+)
+
+type ExtensionOptions struct {
+	Help              bool
+	Tailscale         bool
+	TailscaleHostname string
+	TailscaleAuthKey  string
+	TailscaleStateDir string
+}
+
+type ServerConfig struct {
+	IP                  string
+	UIIP                string
+	Port                int
+	UIPort              int
+	Headless            bool
+	HasUICodecEndpoint  bool
+	EffectiveFrontendIP string
+	EffectiveUIIP       string
+}
+
+func ParseExtensionArgs(args []string) (ExtensionOptions, []string, error) {
+	opts := ExtensionOptions{TailscaleHostname: "temporal-dev"}
+	passThrough := make([]string, 0, len(args))
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			passThrough = append(passThrough, args[i:]...)
+			break
+		}
+
+		switch {
+		case arg == "-h" || arg == "--help":
+			opts.Help = true
+		case arg == "--tailscale":
+			opts.Tailscale = true
+		case arg == "--tsnet":
+			opts.Tailscale = true
+		case strings.HasPrefix(arg, "--tailscale="):
+			v, err := parseBool(arg[len("--tailscale="):])
+			if err != nil {
+				return opts, nil, fmt.Errorf("invalid --tailscale value: %w", err)
+			}
+			opts.Tailscale = v
+		case strings.HasPrefix(arg, "--tsnet="):
+			v, err := parseBool(arg[len("--tsnet="):])
+			if err != nil {
+				return opts, nil, fmt.Errorf("invalid --tsnet value: %w", err)
+			}
+			opts.Tailscale = v
+		case arg == "--tailscale-hostname":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("missing value for --tailscale-hostname")
+			}
+			i++
+			opts.TailscaleHostname = args[i]
+		case arg == "--tsnet-hostname":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("missing value for --tsnet-hostname")
+			}
+			i++
+			opts.TailscaleHostname = args[i]
+		case strings.HasPrefix(arg, "--tailscale-hostname="):
+			opts.TailscaleHostname = arg[len("--tailscale-hostname="):]
+		case strings.HasPrefix(arg, "--tsnet-hostname="):
+			opts.TailscaleHostname = arg[len("--tsnet-hostname="):]
+		case arg == "--tailscale-authkey":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("missing value for --tailscale-authkey")
+			}
+			i++
+			opts.TailscaleAuthKey = args[i]
+		case arg == "--tsnet-authkey":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("missing value for --tsnet-authkey")
+			}
+			i++
+			opts.TailscaleAuthKey = args[i]
+		case strings.HasPrefix(arg, "--tailscale-authkey="):
+			opts.TailscaleAuthKey = arg[len("--tailscale-authkey="):]
+		case strings.HasPrefix(arg, "--tsnet-authkey="):
+			opts.TailscaleAuthKey = arg[len("--tsnet-authkey="):]
+		case arg == "--tailscale-state-dir":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("missing value for --tailscale-state-dir")
+			}
+			i++
+			opts.TailscaleStateDir = args[i]
+		case arg == "--tsnet-state-dir":
+			if i+1 >= len(args) {
+				return opts, nil, fmt.Errorf("missing value for --tsnet-state-dir")
+			}
+			i++
+			opts.TailscaleStateDir = args[i]
+		case strings.HasPrefix(arg, "--tailscale-state-dir="):
+			opts.TailscaleStateDir = arg[len("--tailscale-state-dir="):]
+		case strings.HasPrefix(arg, "--tsnet-state-dir="):
+			opts.TailscaleStateDir = arg[len("--tsnet-state-dir="):]
+		default:
+			passThrough = append(passThrough, arg)
+		}
+	}
+
+	if opts.TailscaleHostname == "" {
+		return opts, nil, fmt.Errorf("--tailscale-hostname cannot be empty")
+	}
+
+	return opts, passThrough, nil
+}
+
+func ParseServerConfig(args []string) (ServerConfig, error) {
+	cfg := ServerConfig{
+		IP:   defaultServerIP,
+		Port: defaultServerPort,
+	}
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+
+		switch {
+		case arg == "--headless":
+			cfg.Headless = true
+		case strings.HasPrefix(arg, "--headless="):
+			v, err := parseBool(arg[len("--headless="):])
+			if err != nil {
+				return cfg, fmt.Errorf("invalid --headless value: %w", err)
+			}
+			cfg.Headless = v
+
+		case arg == "--ip":
+			val, ok := nextArgValue(args, &i)
+			if !ok {
+				return cfg, fmt.Errorf("missing value for --ip")
+			}
+			cfg.IP = val
+		case strings.HasPrefix(arg, "--ip="):
+			cfg.IP = arg[len("--ip="):]
+
+		case arg == "--ui-ip":
+			val, ok := nextArgValue(args, &i)
+			if !ok {
+				return cfg, fmt.Errorf("missing value for --ui-ip")
+			}
+			cfg.UIIP = val
+		case strings.HasPrefix(arg, "--ui-ip="):
+			cfg.UIIP = arg[len("--ui-ip="):]
+
+		case arg == "--port":
+			val, ok := nextArgValue(args, &i)
+			if !ok {
+				return cfg, fmt.Errorf("missing value for --port")
+			}
+			port, err := strconv.Atoi(val)
+			if err != nil {
+				return cfg, fmt.Errorf("invalid --port value %q", val)
+			}
+			cfg.Port = port
+		case strings.HasPrefix(arg, "--port="):
+			val := arg[len("--port="):]
+			port, err := strconv.Atoi(val)
+			if err != nil {
+				return cfg, fmt.Errorf("invalid --port value %q", val)
+			}
+			cfg.Port = port
+
+		case arg == "-p":
+			val, ok := nextArgValue(args, &i)
+			if !ok {
+				return cfg, fmt.Errorf("missing value for -p")
+			}
+			port, err := strconv.Atoi(val)
+			if err != nil {
+				return cfg, fmt.Errorf("invalid -p value %q", val)
+			}
+			cfg.Port = port
+		case strings.HasPrefix(arg, "-p="):
+			val := arg[len("-p="):]
+			port, err := strconv.Atoi(val)
+			if err != nil {
+				return cfg, fmt.Errorf("invalid -p value %q", val)
+			}
+			cfg.Port = port
+		case strings.HasPrefix(arg, "-p") && len(arg) > 2:
+			val := arg[len("-p"):]
+			port, err := strconv.Atoi(val)
+			if err != nil {
+				return cfg, fmt.Errorf("invalid -p value %q", val)
+			}
+			cfg.Port = port
+
+		case arg == "--ui-port":
+			val, ok := nextArgValue(args, &i)
+			if !ok {
+				return cfg, fmt.Errorf("missing value for --ui-port")
+			}
+			port, err := strconv.Atoi(val)
+			if err != nil {
+				return cfg, fmt.Errorf("invalid --ui-port value %q", val)
+			}
+			cfg.UIPort = port
+		case strings.HasPrefix(arg, "--ui-port="):
+			val := arg[len("--ui-port="):]
+			port, err := strconv.Atoi(val)
+			if err != nil {
+				return cfg, fmt.Errorf("invalid --ui-port value %q", val)
+			}
+			cfg.UIPort = port
+
+		case arg == "--ui-codec-endpoint":
+			cfg.HasUICodecEndpoint = true
+			if i+1 < len(args) {
+				i++
+			}
+		case strings.HasPrefix(arg, "--ui-codec-endpoint="):
+			cfg.HasUICodecEndpoint = true
+		}
+	}
+
+	if cfg.UIIP == "" {
+		cfg.UIIP = cfg.IP
+	}
+	if cfg.UIPort == 0 && !cfg.Headless {
+		cfg.UIPort = cfg.Port + 1000
+		if cfg.UIPort > 65535 {
+			cfg.UIPort = 65535
+		}
+	}
+
+	cfg.EffectiveFrontendIP = normalizeDialHost(cfg.IP)
+	cfg.EffectiveUIIP = normalizeDialHost(cfg.UIIP)
+
+	return cfg, nil
+}
+
+func normalizeDialHost(host string) string {
+	if host == "" || host == "localhost" {
+		return "127.0.0.1"
+	}
+	return host
+}
+
+func nextArgValue(args []string, idx *int) (string, bool) {
+	if *idx+1 >= len(args) {
+		return "", false
+	}
+	*idx = *idx + 1
+	return args[*idx], true
+}
+
+func parseBool(s string) (bool, error) {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return false, fmt.Errorf("%q is not a boolean", s)
+	}
+	return v, nil
+}
