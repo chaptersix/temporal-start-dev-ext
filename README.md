@@ -13,8 +13,13 @@ This extension provides:
 Build the extension binary:
 
 ```bash
-make build
-# or
+# Using mage (if installed)
+mage build
+
+# Using go run (no mage installation required)
+go run mage.go build
+
+# Or directly with go
 go build -o ./bin/temporal-ts_net ./cmd/temporal-ts_net
 ```
 
@@ -62,3 +67,21 @@ temporal ts-net \
 - `--tailscale-state-dir` / `--tsnet-state-dir`: local state dir for tsnet node
 
 All non-extension flags are forwarded to `temporal server start-dev`.
+
+## Development
+
+This project uses [Mage](https://magefile.org/) for build tasks. You can use mage directly or via `go run` (zero-install):
+
+```bash
+# List all available targets
+mage -l
+# or (no mage installation required)
+go run mage.go -l
+
+# Available targets:
+go run mage.go build    # Build the binary
+go run mage.go test     # Run tests
+go run mage.go fmt      # Format code
+go run mage.go clean    # Remove build artifacts
+go run mage.go install  # Install to $GOPATH/bin
+```
