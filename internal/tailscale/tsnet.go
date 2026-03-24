@@ -43,6 +43,7 @@ type Server struct {
 	wg                sync.WaitGroup
 	activeConnections atomic.Int32
 	maxConnections    int
+	connSemaphore     chan struct{}
 	rateLimiter       *rate.Limiter
 	dialTimeout       time.Duration
 	idleTimeout       time.Duration
@@ -89,6 +90,10 @@ func Start(parent context.Context, opts Options) (*Server, error) {
 
 	if opts.ConnectionRateLimit > 0 {
 		s.rateLimiter = rate.NewLimiter(rate.Limit(opts.ConnectionRateLimit), int(opts.ConnectionRateLimit))
+	}
+
+	if opts.MaxConnections > 0 {
+		s.connSemaphore = make(chan struct{}, opts.MaxConnections)
 	}
 
 	frontendLn, err := tsSrv.Listen("tcp", fmt.Sprintf(":%d", opts.FrontendPort))
@@ -156,19 +161,22 @@ func acceptLoop(ctx context.Context, ln net.Listener, targetAddr string, srv *Se
 			}
 		}
 
-		// Check connection limit
-		current := srv.activeConnections.Load()
-		if srv.maxConnections > 0 && int(current) >= srv.maxConnections {
-			if srv.logger != nil {
-				srv.logger.Warn("connection limit reached, waiting...",
-					"current", current, "max", srv.maxConnections)
+		// Acquire connection slot (blocks if at limit)
+		if srv.connSemaphore != nil {
+			select {
+			case srv.connSemaphore <- struct{}{}:
+				// Got slot, continue
+			case <-ctx.Done():
+				return
 			}
-			time.Sleep(100 * time.Millisecond)
-			continue
 		}
 
 		conn, err := ln.Accept()
 		if err != nil {
+			// Release semaphore slot if accept failed
+			if srv.connSemaphore != nil {
+				<-srv.connSemaphore
+			}
 			if errors.Is(err, net.ErrClosed) {
 				return
 			}
@@ -189,6 +197,11 @@ func acceptLoop(ctx context.Context, ln net.Listener, targetAddr string, srv *Se
 func proxy(src net.Conn, dstAddr string, srv *Server) {
 	defer srv.activeConnections.Add(-1)
 	defer srv.wg.Done()
+	defer func() {
+		if srv.connSemaphore != nil {
+			<-srv.connSemaphore
+		}
+	}()
 
 	// Set idle timeout on source connection
 	if srv.idleTimeout > 0 {
@@ -279,7 +292,7 @@ func copyWithDeadlineRefresh(dst net.Conn, src net.Conn, timeout time.Duration) 
 			}
 
 			nw, ew := dst.Write(buf[0:nr])
-			if nw < 0 || nr < nw {
+			if nw < 0 {
 				nw = 0
 				if ew == nil {
 					ew = errors.New("invalid write result")

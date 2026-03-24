@@ -68,6 +68,36 @@ temporal ts-net \
 
 All non-extension flags are forwarded to `temporal server start-dev`.
 
+## Testing
+
+### Running Tests
+
+All tests (including Tailscale):
+```bash
+go test ./...
+```
+
+Tailscale tests run entirely in-process using testcontrol - no external services or auth keys needed!
+
+Verbose output:
+```bash
+go test ./internal/tailscale -v
+```
+
+### Demo
+
+See the [demo](demo/) directory for a self-contained example of the Tailscale proxy pattern:
+
+```bash
+go run demo/tailscale-proxy/main.go
+```
+
+This demonstrates the complete proxy flow used by `temporal ts-net --tailscale`, running entirely in-process with no external dependencies.
+
+### CI Testing
+
+Tailscale tests run automatically in CI with no configuration needed. They use testcontrol for isolated, reproducible testing.
+
 ## Development
 
 This project uses [Mage](https://magefile.org/) for build tasks. You can use mage directly or via `go run` (zero-install):
