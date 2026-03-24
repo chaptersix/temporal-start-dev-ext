@@ -146,6 +146,14 @@ func (s *Server) Stop() {
 	})
 }
 
+// GetServer returns the underlying tsnet.Server for testing
+func (s *Server) GetServer() *tsnet.Server {
+	if s == nil {
+		return nil
+	}
+	return s.server
+}
+
 func acceptLoop(ctx context.Context, ln net.Listener, targetAddr string, srv *Server) {
 	for {
 		// Check rate limit

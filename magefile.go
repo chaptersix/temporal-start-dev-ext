@@ -20,7 +20,7 @@ func Build() error {
 // Test runs all tests with race detection and randomized order
 func Test() error {
 	fmt.Println("Running tests with race detector and shuffle...")
-	return sh.Run("go", "test", "-race", "-shuffle=on", "./...")
+	return sh.RunV("go", "test", "-race", "-shuffle=on", "./...")
 }
 
 // Fmt formats all Go source files

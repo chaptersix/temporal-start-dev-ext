@@ -8,12 +8,12 @@ import (
 )
 
 const (
-	defaultServerIP           = "localhost"
-	defaultServerPort         = 7233
-	defaultMaxConnections     = 1000
-	defaultConnectionRate     = 100.0
-	defaultDialTimeout        = 10 * time.Second
-	defaultIdleTimeout        = 5 * time.Minute
+	defaultServerIP       = "localhost"
+	defaultServerPort     = 7233
+	defaultMaxConnections = 1000
+	defaultConnectionRate = 100.0
+	defaultDialTimeout    = 10 * time.Second
+	defaultIdleTimeout    = 5 * time.Minute
 )
 
 type ExtensionOptions struct {
@@ -289,10 +289,7 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		cfg.UIIP = cfg.IP
 	}
 	if cfg.UIPort == 0 && !cfg.Headless {
-		cfg.UIPort = cfg.Port + 1000
-		if cfg.UIPort > 65535 {
-			cfg.UIPort = 65535
-		}
+		cfg.UIPort = min(cfg.Port+1000, 65535)
 	}
 
 	cfg.EffectiveFrontendIP = normalizeDialHost(cfg.IP)
